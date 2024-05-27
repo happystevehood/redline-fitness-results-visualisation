@@ -39,8 +39,10 @@ print('seaborn ', sns.__version__)
 EventList =      [         'Run','Bike','Sandbag Gauntlet','Battle Rope Pull','Farmer\'s Carry','Row','Deadball Burpee','Sled Push','Pendulum Shots','Agility Climber','Ski','The Mule']
 EventListStart = ['Start', 'Run','Bike','Sandbag Gauntlet','Battle Rope Pull','Farmer\'s Carry','Row','Deadball Burpee','Sled Push','Pendulum Shots','Agility Climber','Ski','The Mule']
 
+#relative path is better.
 #rootfilepath = "C:\\Users\\Steph\\Documents\\py\\redline\\"
 rootfilepath = ".\\"
+
 inputfilepath = rootfilepath + "input\\"
 outcsvfilepath= rootfilepath + "output\\csv\\"
 outpngfilepath= rootfilepath + "output\\png\\"
