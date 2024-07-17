@@ -14,7 +14,7 @@
 #
 # Results from abvove were cut and paste into excel file and saved as csv files per competition.
 #
-# This intial development is based on the format for 2023, then 2024 format added
+# This intial development is based on the format for 2023, Now 2024 format added
 #
 
 import pandas as pd
@@ -89,6 +89,7 @@ fileList24 = [
 pltShow=True
 pltPngOut=False
 cvsOut=False
+cvsDurationOut=True
 allScatter=False
 
 #show graphs
@@ -101,13 +102,134 @@ showCorr=True
 showHeat=True
 
 #programatically for now
-do2023input=True
-
+do2023input=False
 
 #############################
 # Tidy the data/data frame
 #############################
 def tidyTheData(df):
+
+    #Rename Columns so consistent across years....etc
+    df.rename(columns={'Net Pos':'Pos'},inplace=True)
+    df.rename(columns={'Sled Push & Pull':'Sled Push Pull'},inplace=True)
+    df.rename(columns={'Ski Erg':'Ski'},inplace=True)
+    df.rename(columns={'Row Erg':'Row'},inplace=True)
+    df.rename(columns={'Bike Erg':'Bike'},inplace=True)
+    df.rename(columns={'Battle Rope Whips':'Battle Whip'},inplace=True)
+    df.rename(columns={'SandbagGauntlet':'Sandbag Gauntlet'},inplace=True)
+    df.rename(columns={'Deadball Burpee Over Target':'Deadball Burpee'},inplace=True)
+
+    #in 2023 doubles "The Mule" Column is called "Finish Column"
+    df.rename(columns={'Finish':'The Mule'},inplace=True)
+
+    #add a  column to calculate the times based on sum of each event.
+    df.insert(len(df.columns), 'Calc Time', 0.0)
+
+    #Reset the CutOffEvent count value to 0
+    EventCutOffCount[:] = [0 for _ in EventCutOffCount]
+
+    # Index to last item
+    MyIndex = len(EventListStart) - 1
+
+    #iterate the event list in reverse order
+    for event in EventListStart[::-1]:
+
+        #Note Event = EventListStart[MyIndex] below, may be tidier ways to write
+
+        #reorganise data such that each event a duration in reverse format
+        for x in df.index:
+
+            # do not write to start time
+            if MyIndex != 0:
+
+                #if time format wrong, it causes excpetions.
+                try:
+                    #2023 does not have decimal places
+                    if (do2023input == True):
+                        df.loc[x,event] = timedelta.total_seconds(datetime.strptime(df.loc[x,event],"%H:%M:%S") - datetime.strptime(df.loc[x,EventListStart[MyIndex-1]] ,"%H:%M:%S"))
+                    #2024 time has decimal places
+                    else:
+                        df.loc[x,event] = timedelta.total_seconds(datetime.strptime(df.loc[x,event],"%H:%M:%S.%f") - datetime.strptime(df.loc[x,EventListStart[MyIndex-1]] ,"%H:%M:%S.%f"))
+
+                    #if value less than 10 seconds, then somthing wrong.
+                    if df.loc[x,event] < 10.0:
+                        #print data...
+                        print ('Removed Low value', x, event, df.loc[x,event], df.loc[x,'Pos'])
+                        
+                        #drop the row
+                        df.drop(x, inplace = True)
+
+                    # else if event is greater than 7 minutes
+                    elif (df.loc[x,event] > 420.0):
+                        
+                        #Increment the CutOff event counter (minus 1 due the diff in lists EventListStart and EventCutOffCount)
+                        EventCutOffCount[MyIndex-1] = EventCutOffCount[MyIndex-1] + 1
+
+                except (ValueError, TypeError):
+                        #One of the values in not a string so write NaN to the value.
+                        #print( df.loc[x,event], df.loc[x,EventListStart[MyIndex-1]])
+                        df.loc[x,event] = float("nan")
+
+        MyIndex = MyIndex - 1
+
+
+    # conver Net Time Column to float in seconds.
+    for x in df.index:
+
+        #if time format wrong, it causes excpetions.
+        try:
+            #2023 does not have decimal places
+            if (do2023input == True):
+                df.loc[x,'Net Time'] =  timedelta.total_seconds(datetime.strptime(df.loc[x,'Net Time'],"%H:%M:%S") - datetime.strptime("00:00:00","%H:%M:%S"))
+            else:
+                df.loc[x,'Net Time'] =  timedelta.total_seconds(datetime.strptime(df.loc[x,'Net Time'],"%H:%M:%S.%f") - datetime.strptime("00:00:00.0","%H:%M:%S.%f"))
+
+            #if net time less than 6 minutes
+            if ((df.loc[x,'Net Time']) < 360.0):
+                #print data...
+                print ('Removed Low NetTime', x, df.loc[x,'Net Time'], df.loc[x,'Pos'])
+                #drop the row
+                df.drop(x, inplace = True)
+
+            #Reset Calculated time for this index
+            calculatedNetTime = 0.0
+
+            #iterate the event list in reverse order
+            for event in EventList:
+                #add each event time.
+                calculatedNetTime = calculatedNetTime + df.loc[x,event] 
+
+            #Store the event time.
+            df.loc[x,'Calc Time'] = calculatedNetTime    
+
+            #if NetTime - Calculated time is less than 12 seconds
+            #if (abs(df.loc[x,'Net Time'] - calculatedNetTime) > 12):
+                                
+                #print ('NetTime Mismatch ', df.loc[x,'Net Time'], calculatedNetTime, abs(df.loc[x,'Net Time'] - calculatedNetTime), x  )
+
+        except (ValueError, TypeError):
+                #Set Time values to None
+                df.loc[x,'Calc Time'] = float("nan")
+                df.loc[x,'Net Time'] = float("nan")
+
+    #dont need anymore
+    if 'Start' in df.columns:
+        df.drop('Start', axis=1, inplace = True)
+
+    #Outpuy the tidy data to csv
+    if (cvsDurationOut): 
+
+        #On a column by colum basis 
+        for event in EventList[::1]:
+            #add a rank column per event
+            df[event + ' Rank'] = df[event].rank(ascending=True)
+
+        outdatafile = filepath + '\\output\\csv\\duration' + file[0] + '.csv'
+        df.to_csv(outdatafile)
+
+        #Remove Rank columns as dont need anymore
+        for event in EventList[::1]:
+            df.drop(event + ' Rank', axis=1, inplace = True)
 
     #Remove boring columns
     df.drop(columns=['Race No','Name', 'Gender', 'Wave'], inplace=True)
@@ -139,102 +261,8 @@ def tidyTheData(df):
     if 'Time Adj' in df.columns:
         df.drop('Time Adj', axis=1, inplace = True)
 
-    #Rename Columns so consistent across years....etc
-    df.rename(columns={'Net Pos':'Pos'},inplace=True)
-    df.rename(columns={'Sled Push & Pull':'Sled Push Pull'},inplace=True)
-    df.rename(columns={'Ski Erg':'Ski'},inplace=True)
-    df.rename(columns={'Row Erg':'Row'},inplace=True)
-    df.rename(columns={'Bike Erg':'Bike'},inplace=True)
-    df.rename(columns={'Battle Rope Whips':'Battle Whip'},inplace=True)
-    df.rename(columns={'SandbagGauntlet':'Sandbag Gauntlet'},inplace=True)
-    df.rename(columns={'Deadball Burpee Over Target':'Deadball Burpee'},inplace=True)
-
-    #in 2023 doubles "The Mule" Column is called "Finish Column"
-    df.rename(columns={'Finish':'The Mule'},inplace=True)
-
-    #drop and rows with empty data including DNF
-    df.dropna(inplace = True)
-
-    #add a  column to calculate the times based on sum of each event.
-    df.insert(0, 'Calc Time', 0.0)
-
-    #Reset the CutOffEvent count value to 0
-    EventCutOffCount[:] = [0 for _ in EventCutOffCount]
-
-    # Index to last item
-    MyIndex = len(EventListStart) - 1
-
-    #iterate the event list in reverse order
-    for event in EventListStart[::-1]:
-
-        #Note Event = EventListStart[MyIndex] below, may be tidier ways to write
-
-        #reorganise data such that each event a duration in reverse format
-        for x in df.index:
-
-            # do not write to start time
-            if MyIndex != 0:
-
-                #2023 does not have decimal places
-                if (do2023input == True):
-                    #write Duration @Position(X) = Time @Position(X) - Time @Position(X-1)
-                    df.loc[x,event] =  timedelta.total_seconds(datetime.strptime(df.loc[x,event],"%H:%M:%S") - datetime.strptime(df.loc[x,EventListStart[MyIndex-1]] ,"%H:%M:%S"))
-                #2024 time has decimal places
-                else:
-                    #write Duration @Position(X) = Time @Position(X) - Time @Position(X-1)
-                    
-                    df.loc[x,event] = timedelta.total_seconds(datetime.strptime(df.loc[x,event],"%H:%M:%S.%f") - datetime.strptime(df.loc[x,EventListStart[MyIndex-1]] ,"%H:%M:%S.%f"))
-                    
-                #if value less than 10 seconds, then somthing wrong.
-                if df.loc[x,event] < 10.0:
-                    #print data...
-                    print ('Removed Low value', x, event, df.loc[x,event], df.loc[x,'Pos'])
-                    
-                    #drop the row
-                    df.drop(x, inplace = True)
-
-                # else if event is greater than 7 minutes
-                elif (df.loc[x,event] > 420.0):
-                    
-                    #Increment the CutOff event counter (minus 1 due the diff in lists EventListStart and EventCutOffCount)
-                    EventCutOffCount[MyIndex-1] = EventCutOffCount[MyIndex-1] + 1
-
-        MyIndex = MyIndex - 1
-
-
-    # conver Net Time Column to float in seconds.
-    for x in df.index:
-        #2023 does not have decimal places
-        if (do2023input == True):
-            df.loc[x,'Net Time'] =  timedelta.total_seconds(datetime.strptime(df.loc[x,'Net Time'],"%H:%M:%S") - datetime.strptime("00:00:00","%H:%M:%S"))
-        else:
-            df.loc[x,'Net Time'] =  timedelta.total_seconds(datetime.strptime(df.loc[x,'Net Time'],"%H:%M:%S.%f") - datetime.strptime("00:00:00.0","%H:%M:%S.%f"))
-
-        #if net time less than 6 minutes
-        if ((df.loc[x,'Net Time']) < 360.0):
-           #print data...
-           print ('Removed Low NetTime', x, df.loc[x,'Net Time'], df.loc[x,'Pos'])
-           #drop the row
-           df.drop(x, inplace = True)
-
-        #Reset Calculated time for this index
-        calculatedNetTime = 0.0
-
-        #iterate the event list in reverse order
-        for event in EventList:
-            #add each event time.
-            calculatedNetTime = calculatedNetTime + df.loc[x,event] 
-
-        #Store the event time.
-        df.loc[x,'Calc Time'] = calculatedNetTime    
-
-        #if NetTime - Calculated time is less than 12 seconds
-        #if (abs(df.loc[x,'Net Time'] - calculatedNetTime) > 12):
-                            
-            #print ('NetTime Mismatch ', df.loc[x,'Net Time'], calculatedNetTime, abs(df.loc[x,'Net Time'] - calculatedNetTime), x  )
-
-    #Now can remove start colum
-    df.drop('Start', axis=1, inplace = True)
+    #drop rows with empty data 
+    df.dropna(inplace = True )
 
 #############################
 # Correlation
